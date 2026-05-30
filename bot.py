@@ -6,7 +6,7 @@ import pandas as pd
 
 TOKEN = os.environ.get('TELEGRAM_TOKEN')
 CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
-GOOGLE_SHEET_URL = "여기에_본인의_구글시트_주소_넣기"
+GOOGLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/1GjxNLRM2dlHqB6GebW73iFd3IEm4YLobzQqfCJBwwAc/edit?gid=0#gid=0"
 
 HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36'}
 
