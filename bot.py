@@ -1,60 +1,51 @@
 import os
 import requests
-from bs4 import BeautifulSoup
-from datetime import datetime
 import pandas as pd
+import time
+from datetime import datetime
+from bs4 import BeautifulSoup
 
 TOKEN = os.environ.get('TELEGRAM_TOKEN')
 CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
 SHEET_ID = "1GjxNLRM2dlHqB6GebW73iFd3IEm4YLobzQqfCJBwwAc"
+HEADERS = {'User-Agent': 'Mozilla/5.0'}
 
-HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36'}
-
-def get_latest_news(name):
-    """네이버 뉴스에서 가장 최근(1분 전까지 포함) 기사 제목을 가져오는 함수"""
+def get_my_watch_list():
     try:
-        url = f"https://search.naver.com/search.naver?where=news&query={name}&sm=tab_opt&sort=1" # 최신순 정렬
-        res = requests.get(url, headers=HEADERS, timeout=5)
-        soup = BeautifulSoup(res.text, 'html.parser')
-        news_title = soup.select_one('a.news_tit').text
-        return news_title
+        url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv"
+        df = pd.read_csv(url)
+        return {str(row.iloc[0]): str(row.iloc[1]) for _, row in df.iterrows() if pd.notna(row.iloc[0])}
     except:
-        return "관련 뉴스 수집 중"
+        return {'두산테스나': '131970'}
 
-def get_market_data_with_news(url_path):
-    """데이터와 뉴스 근거를 함께 묶어주는 함수"""
+def get_stock_technical(code):
+    """KRX 데이터 기반 이동평균선 계산 (일봉 기준)"""
     try:
-        url = f"https://finance.naver.com/sise/{url_path}"
-        res = requests.get(url, headers=HEADERS, timeout=10)
-        res.encoding = 'euc-kr'
-        soup = BeautifulSoup(res.text, 'html.parser')
-        rows = soup.select('table.type_2 tr[onmouseover]')
+        url = f"https://fchart.stock.naver.com/sise.nhn?symbol={code}&timeframe=day&count=60&requestType=0"
+        res = requests.get(url, headers=HEADERS)
+        data = [line.split('|') for line in res.text.split('\n') if len(line.split('|')) > 4]
+        df = pd.DataFrame(data, columns=['date', 'open', 'high', 'low', 'close', 'vol'])
+        df['close'] = df['close'].astype(int)
         
-        result = ""
-        for row in rows[:10]:
-            cols = row.select('td')
-            name = cols[1].text.strip()
-            val = cols[2].text.strip()
-            news = get_latest_news(name) # 여기서 실시간 뉴스 근거 취합
-            result += f"• {name} ({val}) | 근거: {news[:35]}...\n"
-        return result
+        # 5일선, 20일선 계산
+        ma5 = df['close'].rolling(window=5).mean()
+        ma20 = df['close'].rolling(window=20).mean()
+        
+        if ma5.iloc[-1] > ma20.iloc[-1] and ma5.iloc[-2] <= ma20.iloc[-2]:
+            return "골든크로스 발생"
+        return "추세 관찰"
     except:
-        return "데이터 준비중\n"
+        return "데이터 없음"
 
 if __name__ == "__main__":
-    today = datetime.now().strftime('%Y-%m-%d %H:%M')
+    today = datetime.now().strftime('%Y-%m-%d')
+    watch_list = get_my_watch_list()
     
-    # 1. 관심종목 상세 분석
-    msg = f"🌟 {today} 국장 정밀 분석 리포트 🌟\n\n📌 [관심 종목 9선]\n"
-    # (관심종목 9개 상세 분석 부분도 get_latest_news를 활용하여 근거 추가 가능)
+    msg = f"🌟 {today} 정밀 리포트 🌟\n\n📌 [관심 종목 분석]\n"
+    for name, code in watch_list.items():
+        trend = get_stock_technical(code)
+        msg += f"• {name} | 추세: {trend}\n"
     
-    # 2. 시장 데이터 및 뉴스 근거 취합
-    msg += f"\n🔥 [거래량 상위 10]\n{get_market_data_with_news('sise_quant.naver')}"
-    msg += f"\n📈 [상승률 상위 10]\n{get_market_data_with_news('sise_rise.naver')}"
-    msg += f"\n📉 [하락률 상위 10]\n{get_market_data('sise_fall.naver')}"
-    msg += f"\n🏢 [기관 매수 상위 10]\n{get_market_data_with_news('sise_deal_institution.naver')}"
-    msg += f"\n👽 [외인 매수 상위 10]\n{get_market_data_with_news('sise_deal_foreigner.naver')}"
-    
-    msg += "\n🚀 실시간 뉴스 분석 완료! 원칙 매매로 승리하세요!"
+    msg += "\n🚀 원칙 매매로 승리하세요!"
     requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", 
                   json={"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown"})
