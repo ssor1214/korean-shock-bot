@@ -1,0 +1,29 @@
+name: Daily Stock Alert
+
+on:
+  schedule:
+    # 한국 시간 기준 월~금 아침 8시 10분에 켜집니다.
+    - cron: '10 23 * * 0-4'
+  workflow_dispatch: # 이 글자가 있어야 화면에 수동 실행 버튼이 생깁니다.
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    steps:
+    - name: 코드 가져오기
+      uses: actions/checkout@v3
+
+    - name: 파이썬 설치
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: 필요한 도구 설치
+      run: |
+        pip install requests beautifulsoup4
+
+    - name: 주식 봇 실행하기
+      env:
+        TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      run: python bot.py
