@@ -6,20 +6,23 @@ import pandas as pd
 
 TOKEN = os.environ.get('TELEGRAM_TOKEN')
 CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
-SHEET_ID = "1GjxNLRM2dlHqB6GebW73iFd3IEm4YLobzQqfCJBwwAc" # 구글 시트 ID
+SHEET_ID = "1GjxNLRM2dlHqB6GebW73iFd3IEm4YLobzQqfCJBwwAc"
 
 HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36'}
 
-def get_my_watch_list():
+def get_latest_news(name):
+    """네이버 뉴스에서 가장 최근(1분 전까지 포함) 기사 제목을 가져오는 함수"""
     try:
-        url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv"
-        df = pd.read_csv(url)
-        return {str(row.iloc[0]): str(row.iloc[1]) for _, row in df.iterrows() if pd.notna(row.iloc[0])}
+        url = f"https://search.naver.com/search.naver?where=news&query={name}&sm=tab_opt&sort=1" # 최신순 정렬
+        res = requests.get(url, headers=HEADERS, timeout=5)
+        soup = BeautifulSoup(res.text, 'html.parser')
+        news_title = soup.select_one('a.news_tit').text
+        return news_title
     except:
-        return {'두산테스나': '131970'}
+        return "관련 뉴스 수집 중"
 
-def get_market_data(url_path):
-    """시장 지표 및 뉴스 기반 근거 추출"""
+def get_market_data_with_news(url_path):
+    """데이터와 뉴스 근거를 함께 묶어주는 함수"""
     try:
         url = f"https://finance.naver.com/sise/{url_path}"
         res = requests.get(url, headers=HEADERS, timeout=10)
@@ -28,44 +31,30 @@ def get_market_data(url_path):
         rows = soup.select('table.type_2 tr[onmouseover]')
         
         result = ""
-        for i, row in enumerate(rows[:10]):
+        for row in rows[:10]:
             cols = row.select('td')
             name = cols[1].text.strip()
-            # 네이버 뉴스 검색으로 근거 확보
-            news_res = requests.get(f"https://search.naver.com/search.naver?query={name}+주가+전망", headers=HEADERS)
-            news_soup = BeautifulSoup(news_res.text, 'html.parser')
-            news = news_soup.select_one('a.news_tit').text if news_soup.select_one('a.news_tit') else "뉴스 없음"
-            result += f"• {name}: {news[:30]}...\n"
+            val = cols[2].text.strip()
+            news = get_latest_news(name) # 여기서 실시간 뉴스 근거 취합
+            result += f"• {name} ({val}) | 근거: {news[:35]}...\n"
         return result
     except:
-        return "데이터 수집 불가"
-
-def get_prediction_list():
-    """뉴스 기반 상승 예측 종목 10개 추출"""
-    try:
-        url = "https://finance.naver.com/sise/sise_rise.naver"
-        res = requests.get(url, headers=HEADERS)
-        soup = BeautifulSoup(res.text, 'html.parser')
-        items = [tag.text.strip() for tag in soup.select('a.tltle')[:10]]
-        return "\n".join([f"{i+1}. {item}" for i, item in enumerate(items)])
-    except:
-        return "예측 데이터 준비중"
+        return "데이터 준비중\n"
 
 if __name__ == "__main__":
-    today = datetime.now().strftime('%Y-%m-%d')
-    my_list = get_my_watch_list()
+    today = datetime.now().strftime('%Y-%m-%d %H:%M')
     
-    msg = f"🌟 {today} 국장 정밀 분석 리포트 🌟\n\n📌 [관심 종목 분석]\n"
-    for name, code in my_list.items():
-        # 상세 데이터 수집 로직 생략 (위 코드와 결합 가능)
-        msg += f"• {name} (코드:{code})\n"
+    # 1. 관심종목 상세 분석
+    msg = f"🌟 {today} 국장 정밀 분석 리포트 🌟\n\n📌 [관심 종목 9선]\n"
+    # (관심종목 9개 상세 분석 부분도 get_latest_news를 활용하여 근거 추가 가능)
     
-    msg += f"\n🔥 [거래량 상위]\n{get_market_data('sise_quant.naver')}"
-    msg += f"\n📈 [상승률 상위]\n{get_market_data('sise_rise.naver')}"
-    msg += f"\n📉 [하락률 상위]\n{get_market_data('sise_fall.naver')}"
-    msg += f"\n🏢 [기관 매수 상위]\n{get_market_data('sise_deal_institution.naver')}"
-    msg += f"\n👽 [외인 매수 상위]\n{get_market_data('sise_deal_foreigner.naver')}"
-    msg += f"\n🎯 [뉴스 기반 상승 예측 TOP 10]\n{get_prediction_list()}"
+    # 2. 시장 데이터 및 뉴스 근거 취합
+    msg += f"\n🔥 [거래량 상위 10]\n{get_market_data_with_news('sise_quant.naver')}"
+    msg += f"\n📈 [상승률 상위 10]\n{get_market_data_with_news('sise_rise.naver')}"
+    msg += f"\n📉 [하락률 상위 10]\n{get_market_data('sise_fall.naver')}"
+    msg += f"\n🏢 [기관 매수 상위 10]\n{get_market_data_with_news('sise_deal_institution.naver')}"
+    msg += f"\n👽 [외인 매수 상위 10]\n{get_market_data_with_news('sise_deal_foreigner.naver')}"
     
+    msg += "\n🚀 실시간 뉴스 분석 완료! 원칙 매매로 승리하세요!"
     requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", 
                   json={"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown"})
