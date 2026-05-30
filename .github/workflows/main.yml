@@ -4,6 +4,7 @@ on:
     - cron: '0 * * * *' # 매 정시마다 실행
   workflow_dispatch:     # 수동 실행 버튼 활성화 (테스트용)
 
+
 jobs:
   run-bot:
     runs-on: ubuntu-latest
