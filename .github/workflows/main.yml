@@ -1,23 +1,18 @@
 name: Interest Bot
+
 on:
   schedule:
-    - cron: '0 * * * *' # 매 정시마다 실행
-  workflow_dispatch:     # 수동 실행 버튼 활성화 (테스트용)
-
+    - cron: '0 * * * *'
+  workflow_dispatch:
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
-  env:
+    env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-      # 아래 줄 추가
-      SHEET_ID: ${{ secrets.SHEET_ID }} 
-      
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-      TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      SHEET_ID: ${{ secrets.SHEET_ID }}
     steps:
       - name: 코드 가져오기
         uses: actions/checkout@v4
