@@ -2,24 +2,24 @@ name: Daily Stock Alert
 
 on:
   schedule:
-    # 깃허브 서버(영국 시간) 기준이라 한국 시간에 맞춰 시/분을 계산한 세팅입니다.
-    # 월요일부터 금요일까지 하루 총 3번 자동으로 실행됩니다.
-    
-    - cron: '10 23 * * 0-4'  # 1회차: 한국 시간 오전 08시 10분 (전날 밤 23시 10분)
-    - cron: '50 03 * * 1-5'  # 2회차: 한국 시간 오후 12시 50분 (당일 새벽 03시 50분)
-    - cron: '10 09 * * 1-5'  # 3회차: 한국 시간 오후 18시 10분 (당일 오전 09시 10분)
+    # 하루 3번(오전 8시 10분, 오후 12시 50분, 오후 6시 10분) 정밀 알람 시간표
+    - cron: '10 23 * * 0-4'  # 1회차: 한국 시간 오전 08시 10분
+    - cron: '50 03 * * 1-5'  # 2회차: 한국 시간 오후 12시 50분
+    - cron: '10 09 * * 1-5'  # 3회차: 한국 시간 오후 18시 10분
 
-  workflow_dispatch: # 내가 원할 때 언제든 수동으로 버튼을 눌러 실행하는 기능
+  workflow_dispatch: # 수동 실행 버튼
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
     steps:
+    # 1. 코드 가져오기 도구를 최신 버전인 v4로 업그레이드!
     - name: 코드 가져오기
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
+    # 2. 파이썬 설치 도구를 최신 버전인 v5로 업그레이드!
     - name: 파이썬 설치
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.10'
 
