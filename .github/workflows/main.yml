@@ -2,22 +2,18 @@ name: Daily Stock Alert
 
 on:
   schedule:
-    # 하루 3번(오전 8시 10분, 오후 12시 50분, 오후 6시 10분) 정밀 알람 시간표
-    - cron: '10 23 * * 0-4'  # 1회차: 한국 시간 오전 08시 10분
-    - cron: '50 03 * * 1-5'  # 2회차: 한국 시간 오후 12시 50분
-    - cron: '10 09 * * 1-5'  # 3회차: 한국 시간 오후 18시 10분
-
-  workflow_dispatch: # 수동 실행 버튼
+    - cron: '10 23 * * 0-4'  # 1회차: 오전 08시 10분
+    - cron: '50 03 * * 1-5'  # 2회차: 오후 12시 50분
+    - cron: '10 09 * * 1-5'  # 3회차: 오후 18시 10분
+  workflow_dispatch:
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
     steps:
-    # 1. 코드 가져오기 도구를 최신 버전인 v4로 업그레이드!
     - name: 코드 가져오기
       uses: actions/checkout@v4
 
-    # 2. 파이썬 설치 도구를 최신 버전인 v5로 업그레이드!
     - name: 파이썬 설치
       uses: actions/setup-python@v5
       with:
@@ -25,7 +21,7 @@ jobs:
 
     - name: 필요한 도구 설치
       run: |
-        pip install requests beautifulsoup4
+        pip install requests beautifulsoup4 pandas
 
     - name: 주식 봇 실행하기
       env:
