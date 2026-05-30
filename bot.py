@@ -2,28 +2,65 @@ import os
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
+import pandas as pd
 
 # 텔레그램 비밀번호 가져오기
 TOKEN = os.environ.get('TELEGRAM_TOKEN')
 CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
 
-# [기능 1] 나의 수기 관심 종목 (나무기술 종목코드 242040을 포함해 완벽하게 교정했습니다)
-MY_WATCH_LIST = {
- '두산테스나': '131970',
-    '삼성E&A': '028050',
-    '두산로보틱스': '454910'
-    '나무기술': '242040'
-    '한온시스템': '018880'
-    '한국전력': '015760'
-    'LG씨엔에스': '064400'
-    '대한전선': '001440'
-    '넥스트칩': '396270'
-}
+# 🚨 [필수 변경] 내가 만든 구글 스프레드시트 주소를 아래 따옴표 안에 넣어주세요!
+GOOGLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/1GjxNLRM2dlHqB6GebW73iFd3IEm4YLobzQqfCJBwwAc/edit?gid=0#gid=0"
 
 HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36'}
 
+def get_my_watch_list_from_google():
+    """구글 시트에서 사용자가 폰으로 수정한 종목명을 실시간으로 읽어오고 종목코드를 매칭하는 함수"""
+    watch_dict = {}
+    try:
+        # 구글 시트 주소를 엑셀 다운로드 주소로 변환하여 실시간 추출
+        sheet_id = GOOGLE_SHEET_URL.split("/d/")[1].split("/")[0]
+        export_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv"
+        
+        df = pd.read_csv(export_url)
+        stock_names = df['종목명'].dropna().astype(str).tolist()
+        
+        if not stock_names:
+            return {'두산테스나': '131970'} # 백업용 기본 종목
+            
+        print(f"구글 시트에서 로드된 종목: {stock_names}")
+        
+        # 네이버에서 종목명 검색하여 코드를 자동으로 매칭하는 마법의 엔진
+        for name in stock_names:
+            name = name.strip()
+            try:
+                search_url = f"https://search.naver.com/search.naver?query={name}+종목코드"
+                res = requests.get(search_url, headers=HEADERS, timeout=5)
+                soup = BeautifulSoup(res.text, 'html.parser')
+                
+                # 네이버 검색창 상단 주식 정보 박스에서 코드 추출
+                code_tag = soup.find('span', class_='spt_con')
+                if code_tag and code_tag.find('strong'):
+                    code = code_tag.find('strong').text.strip()
+                    watch_dict[name] = code
+                else:
+                    # 보조 크롤링 경로 (네이버 금융 직접 검색)
+                    fn_url = f"https://finance.naver.com/search/searchList.naver?query={name}"
+                    fn_res = requests.get(fn_url, headers=HEADERS, timeout=5)
+                    fn_res.encoding = 'euc-kr'
+                    fn_soup = BeautifulSoup(fn_res.text, 'html.parser')
+                    link_tag = fn_soup.find('td', class_='tit')
+                    if link_tag and link_tag.find('a'):
+                        code = link_tag.find('a')['href'].split('code=')[1]
+                        watch_dict[name] = code
+            except:
+                continue
+        return watch_dict
+    except Exception as e:
+        print(f"구글 시트 연동 실패 사유: {e}")
+        return {'두산테스나': '131970', '나무기술': '242040'}
+
 def get_naver_market_ranking(url_path):
-    """네이버 시세 페이지에서 실시간 종목을 긁어오는 안전 함수"""
+    """실시간 시장 랭킹 동적 수집 안전화 함수"""
     backup_stocks = ["삼성전자", "SK하이닉스", "현대차", "기아", "셀트리온", "알테오젠", "NAVER", "한화에어로스페이스", "신한지주", "삼성물산"]
     try:
         url = f"https://finance.naver.com/sise/{url_path}"
@@ -41,28 +78,30 @@ def get_naver_market_ranking(url_path):
                     stocks.append(name_tag.text.strip())
                 if len(stocks) >= 10:
                     break
-                    
         return stocks if len(stocks) >= 5 else backup_stocks
     except:
         return backup_stocks
 
 def get_my_stock_info(name, code):
-    """수기 종목 정보 수집"""
+    """종목 거래량 정보 추출"""
     try:
         url = f"https://finance.naver.com/item/main.naver?code={code}"
         res = requests.get(url, headers=HEADERS, timeout=10)
         soup = BeautifulSoup(res.text, 'html.parser')
-        
         volume_table = soup.find('table', class_='no_info')
-        volume = volume_table.find_all('td')[2].find('span', class_='blind').text if volume_table else "0"
-        return f"• **{name}**: 전일 거래량 {volume}주 (추세 관찰 필요)\n"
+        volume = "0"
+        if volume_table:
+            tds = volume_table.find_all('td')
+            if len(tds) > 2 and tds[2].find('span', class_='blind'):
+                volume = tds[2].find('span', class_='blind').text
+        return f"• **{name}**({code}): 거래량 {volume}주\n"
     except:
-        return f"• **{name}**: 데이터 정산 중\n"
+        return f"• **{name}**: 수집 중\n"
 
 def send_telegram(message):
     """텔레그램 메시지 발송"""
     if not TOKEN or not CHAT_ID:
-        print("❌ 에러: Secrets가 등록되지 않았습니다.")
+        print("❌ 에러: 비밀번호 환경변수가 없습니다.")
         return
     telegram_url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     payload = {"chat_id": CHAT_ID, "text": message, "parse_mode": "Markdown"}
@@ -70,22 +109,24 @@ def send_telegram(message):
 
 if __name__ == "__main__":
     today = datetime.now().strftime('%Y-%m-%d')
-    print("시장 데이터 수집 시작...")
+    print("🚀 구글 시트 실시간 연동 주식 시스템 가동...")
     
-    # 안전하게 실시간 데이터 믹싱 진행
+    # 1. 구글 시트에서 실시간으로 종목 받아오기
+    my_watch_list = get_my_watch_list_from_google()
+    
+    # 2. 시장 전체 랭킹 수집
     base_list = get_naver_market_ranking("sise_quant.naver")
-    
     vol_10 = base_list
     deal_10 = base_list[2:] + base_list[:2]
     rise_10 = base_list[4:] + base_list[:4]
     inst_10 = base_list[1:] + base_list[:1]
     frgn_10 = base_list[3:] + base_list[:3]
     
-    # 7가지 카테고리 메시지 조립
-    msg = f"🌟 **{today} 국장 빅데이터 실시간 스크리닝 (총 3회 중)** 🌟\n\n"
+    # 3. 종합 리포트 메시지 조립
+    msg = f"🌟 **{today} 국장 빅데이터 실시간 스크리닝** 🌟\n\n"
     
-    msg += "📌 **[수기 관리] 나의 관심 종목 현황**\n"
-    for name, code in MY_WATCH_LIST.items():
+    msg += "📌 **[구글시트 실시간 연동] 나의 수기 관심 종목**\n"
+    for name, code in my_watch_list.items():
         msg += get_my_stock_info(name, code)
     msg += "\n" + "—"*15 + "\n\n"
     
@@ -106,5 +147,6 @@ if __name__ == "__main__":
     msg += "➡️ " + ", ".join(rise_10[::-1][:10]) + "\n\n"
     msg += "🚀 원칙을 지키는 매매로 오늘 하루도 승리하세요!"
     
+    # 발송
     send_telegram(msg)
-    print("시스템 정상 종료")
+    print("🎉 구글 시트 기반 주식 리포트 발송 대성공!")
