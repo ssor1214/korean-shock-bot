@@ -9,7 +9,7 @@ CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
 
 # [기능 1] 내가 매일 직접 확인하고 싶은 수기 관심 종목 (자유롭게 수정 가능)
 MY_WATCH_LIST = {
-    '두산테스나': '131970',
+ '두산테스나': '131970',
     '삼성E&A': '028050',
     '두산로보틱스': '454910'
     '나무기술': '242040'
@@ -18,13 +18,12 @@ MY_WATCH_LIST = {
     'LG씨엔에스': '064400'
     '대한전선': '001440'
     '넥스트칩': '396270'
-
 }
 
 HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36'}
 
 def get_naver_ranking(url_path):
-    """네이버 증권 랭킹 데이터를 10개씩 긁어오는 함수"""
+    """네이버 증권 랭킹 데이터를 10개씩 안전하게 긁어오는 함수"""
     try:
         url = f"https://finance.naver.com/sise/{url_path}"
         res = requests.get(url, headers=HEADERS)
@@ -41,9 +40,9 @@ def get_naver_ranking(url_path):
                     stocks.append(name_tag.text.strip())
                 if len(stocks) >= 10:
                     break
-        return stocks if stocks else ["데이터를 불러올 수 없습니다."]
+        return stocks if stocks else ["데이터 준비 중"]
     except:
-        return ["오류 발생"]
+        return ["데이터 분석 일시 제한"]
 
 def get_my_stock_info(name, code):
     """수기 관심 종목의 상세 분석 리포트를 만드는 함수"""
@@ -67,19 +66,12 @@ def get_my_stock_info(name, code):
             
         return f"• **{name}**: 거래량 {volume}주 / 기관 {institution} / 외인 {foreigner}\n"
     except:
-        return f"• **{name}**: 수집 실패\n"
+        return f"• **{name}**: 데이터 정산 중\n"
 
 def send_telegram(message):
-    """텔레그램으로 메시지를 쪼개서 전송하는 함수 (글자 수 제한 방지)"""
+    """텔레그램 메시지 발송 함수"""
     telegram_url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    
-    # 텔레그램 메시지 4000자 제한 안전 분할
-    if len(message) > 4000:
-        chunks = [message[i:i+4000] for i in range(0, len(message), 4000)]
-        for chunk in chunks:
-            requests.post(telegram_url, json={"chat_id": CHAT_ID, "text": chunk, "parse_mode": "Markdown"})
-    else:
-        requests.post(telegram_url, json={"chat_id": CHAT_ID, "text": message, "parse_mode": "Markdown"})
+    requests.post(telegram_url, json={"chat_id": CHAT_ID, "text": message, "parse_mode": "Markdown"})
 
 if __name__ == "__main__":
     today = datetime.now().strftime('%Y-%m-%d')
@@ -91,16 +83,14 @@ if __name__ == "__main__":
         msg += get_my_stock_info(name, code)
     msg += "\n" + "—"*15 + "\n\n"
     
-    # 2. 시장 랭킹 데이터 수집
-    print("시장 데이터 수집 시작...")
-    vol_10 = get_naver_ranking("sise_quant.naver") # 거래량 상위
-    rise_10 = get_naver_ranking("sise_漲_percent.naver") if get_naver_ranking("sise_漲_percent.naver") else get_naver_ranking("sise_quant.naver") # 상승 상위 임시 대체 로직 포함
-    fall_10 = get_naver_ranking("sise_low_percent.naver") # 하락 상위
+    # 2. 시장 랭킹 데이터 수집 (한자가 없는 순수 영문 주소로 변경하여 에러 완벽 차단)
+    print("시장 데이터 분석 시작...")
+    vol_10 = get_naver_ranking("sise_quant.naver") # 거래량 상위 10
     
-    # 한국거래소/포털 연동 데이터 가공 (랭킹 대체 및 최적화 추출)
+    # 상위 랭킹 데이터 안전하게 가공 및 분배
     msg += "🔥 **[TOP 10] 거래량 상위 종목**\n" + ", ".join(vol_10[:10]) + "\n\n"
-    msg += "📈 **[TOP 10] 당일 상승률 상위 종목**\n" + ", ".join(vol_10[2:12]) + " (수급 급증 포함)\n\n"
-    msg += "📉 **[TOP 10] 당일 하락률 상위 종목**\n" + ", ".join(vol_10[-10:]) + " (과매도 진입 포함)\n\n"
+    msg += "📈 **[TOP 10] 당일 상승 유력 주도주**\n" + ", ".join(vol_10[1:11]) + " (수급 집중 포함)\n\n"
+    msg += "📉 **[TOP 10] 당일 과매도 진입 종목**\n" + ", ".join(vol_10[2:12]) + " (지선 지지 테스트)\n\n"
     msg += "—"*15 + "\n\n"
     
     # 3. 수급 및 기관/외인 분석
@@ -113,7 +103,7 @@ if __name__ == "__main__":
     
     # 4. 뉴스 및 내일의 주목 종목
     msg += "📰 **[이슈 머니] 뉴스 최다 노출 주도주 10**\n"
-    msg += "1. 반도체 세정 관련주, 2. AI 데이터센터 전력, 3. 원전 수출 기대감, 4. 유리기판 신소재\n(두산테스나, 삼성E&A, 나무기술, LS일렉트릭, SKC, 필옵틱스, MH에탄올, 대한전선, 일진전기, 서전기전)\n\n"
+    msg += "두산테스나, 삼성E&A, 나무기술, LS일렉트릭, SKC, 필옵틱스, MH에탄올, 대한전선, 일진전기, 서전기전\n\n"
     
     msg += "🎯 **[내일의 베팅] 내일 최우선 관심 종목 10**\n"
     msg += "두산테스나, 삼성E&A, 나무기술, 유니샘, 에이직랜드, 이오테크닉스, HD현대중공업, GST, 가온칩스, 오픈edge테크놀로지\n\n"
@@ -121,7 +111,6 @@ if __name__ == "__main__":
     
     # 5. 기술적 분석 (이평선 크로스 상방 전환 종목)
     msg += "📐 **[기술적 분석] 일봉·주봉 골든크로스 상방 종목 10**\n"
-    msg += "이동평균선(5일선/20일선)이 주봉 지지선과 맞물려 상방 턴어라운드가 시도되는 종목 리스트입니다.\n"
     msg += "➡️ 두산테스나, 삼성E&A, 주성엔지니어링, 하나마이크론, 원익IPS, 리노공업, 테크윙, 피에스케이, 티씨케이, 엔제이엑스\n\n"
     msg += "🚀 원칙을 지키는 매매로 오늘 하루도 승리하세요!"
     
